@@ -125,7 +125,7 @@ class FastF1Repository:
         Raises:
             ValueError: If no valid lap is found for the driver.
         """
-        lap = session.laps.pick_driver(driver).pick_fastest()
+        lap = session.laps.pick_drivers(driver).pick_fastest()
         if lap is None:
             raise ValueError(
                 f"No valid fastest lap found for driver '{driver}' "
@@ -152,7 +152,7 @@ class FastF1Repository:
         Raises:
             ValueError: If the driver or lap number is not found in the session.
         """
-        laps = session.laps.pick_driver(driver)
+        laps = session.laps.pick_drivers(driver)
         matching = laps[laps["LapNumber"] == lap_number]
 
         if matching.empty:

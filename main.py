@@ -92,7 +92,7 @@ with st.sidebar:
     driver_b = st.text_input("Driver B", placeholder="e.g. HAM", max_chars=3).upper()
 
     st.markdown("---")
-    load_btn = st.button("Load Session", type="primary", use_container_width=True)
+    load_btn = st.button("Load Session", type="primary", width="stretch")
 
     # Show cached state indicator when results are present
     if _RESULTS_KEY in st.session_state:
@@ -250,12 +250,12 @@ if _RESULTS_KEY in st.session_state:
 
     with tabs[0]:
         section_header("Speed Analysis", "Distance-based speed comparison and time delta")
-        st.plotly_chart(speed_trace_chart(synced), use_container_width=True)
-        st.plotly_chart(delta_chart(speed_result), use_container_width=True)
+        st.plotly_chart(speed_trace_chart(synced), width="stretch")
+        st.plotly_chart(delta_chart(speed_result), width="stretch")
 
     with tabs[1]:
         section_header("Driver DNA", "Throttle and brake signature analysis")
-        st.plotly_chart(throttle_brake_chart(synced), use_container_width=True)
+        st.plotly_chart(throttle_brake_chart(synced), width="stretch")
 
         # DNA profile table
         dna_summary = dna_result.summary
@@ -286,23 +286,23 @@ if _RESULTS_KEY in st.session_state:
             }
             st.dataframe(
                 pd.DataFrame(dna_data).set_index("Metric"),
-                use_container_width=True,
+                width="stretch",
             )
 
     with tabs[2]:
         section_header("Micro-Sector Dominance", "50 m segment control across the full lap")
         chart_col, map_col = st.columns([3, 2], gap="medium")
         with chart_col:
-            st.plotly_chart(micro_sector_chart(micro_result), use_container_width=True)
+            st.plotly_chart(micro_sector_chart(micro_result), width="stretch")
         with map_col:
-            st.plotly_chart(track_heatmap(synced, micro_result), use_container_width=True)
+            st.plotly_chart(track_heatmap(synced, micro_result), width="stretch")
 
     with tabs[3]:
         section_header("Overtake Profile", "Corner exit speed advantage per zone")
-        st.plotly_chart(overtake_chart(overtake_result), use_container_width=True)
+        st.plotly_chart(overtake_chart(overtake_result), width="stretch")
 
         if not overtake_result.data.empty:
-            st.dataframe(overtake_result.data, use_container_width=True)
+            st.dataframe(overtake_result.data, width="stretch")
 
     with tabs[4]:
         section_header("Race Engineer Verdict", "AI-generated performance summary")
