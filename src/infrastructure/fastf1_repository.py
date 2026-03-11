@@ -27,6 +27,18 @@ from src.shared.constants import (
 
 logger = logging.getLogger(__name__)
 
+# Maps FastF1 session names (from event schedule) to session type codes
+_SESSION_NAME_TO_CODE: dict[str, str] = {
+    "Practice 1": "FP1",
+    "Practice 2": "FP2",
+    "Practice 3": "FP3",
+    "Qualifying": "Q",
+    "Race": "R",
+    "Sprint": "S",
+    "Sprint Qualifying": "SQ",
+    "Sprint Shootout": "SS",
+}
+
 
 class FastF1Repository:
     """Thread-safe Singleton repository for FastF1 data access.
@@ -73,6 +85,120 @@ class FastF1Repository:
     # Public API
     # ------------------------------------------------------------------
 
+    def get_event_schedule(self, year: Year) -> list[str]:
+        """Return a list of Grand Prix event names for the given season.
+
+        Results are cached in Streamlit session_state so repeated year
+        selections do not trigger additional network requests.
+
+        Args:
+            year: Championship year, e.g. 2024.
+
+        Returns:
+            Sorted list of event name strings, e.g. ``["Bahrain Grand Prix", …]``.
+            Returns an empty list if the schedule cannot be fetched.
+        """
+        cache_key = f"_schedule_{year}"
+        cached = self._cache_manager.get_from_session(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            schedule = fastf1.get_event_schedule(year, include_testing=False)
+            event_names: list[str] = schedule["EventName"].tolist()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not fetch event schedule for %d: %s", year, exc)
+            event_names = []
+
+        self._cache_manager.set_in_session(cache_key, event_names)
+        return event_names
+
+    def get_event_session_types(self, year: Year, gp: GrandPrix) -> list[str]:
+        """Return the session type codes available for a specific Grand Prix.
+
+        Parses the FastF1 event to determine which sessions actually exist
+        (e.g. not all rounds have a Sprint). Results are cached in session_state.
+
+        Args:
+            year: Championship year.
+            gp: Grand Prix event name.
+
+        Returns:
+            Ordered list of session type codes, e.g. ``["FP1", "FP2", "FP3", "Q", "R"]``.
+            Falls back to the standard five-session weekend if the event cannot be fetched.
+        """
+        cache_key = f"_session_types_{year}_{gp}"
+        cached = self._cache_manager.get_from_session(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            event = fastf1.get_event(year, gp)
+            session_types: list[str] = []
+            for i in range(1, 6):
+                name = event.get(f"Session{i}", "")
+                if name and str(name).lower() not in ("", "none", "nan"):
+                    code = _SESSION_NAME_TO_CODE.get(str(name))
+                    if code:
+                        session_types.append(code)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not fetch session types for %s %d: %s", gp, year, exc)
+            session_types = ["FP1", "FP2", "FP3", "Q", "R"]
+
+        self._cache_manager.set_in_session(cache_key, session_types)
+        return session_types
+
+    def get_session_drivers(
+        self,
+        year: Year,
+        gp: GrandPrix,
+        session_type: str,
+    ) -> dict[str, str]:
+        """Return a mapping of driver code → full name for a session.
+
+        Only lap data is fetched — no telemetry — so this is significantly
+        faster than ``get_session()``. Results are cached in session_state.
+
+        Args:
+            year: Championship year.
+            gp: Grand Prix event name.
+            session_type: Session identifier, e.g. ``"Q"``.
+
+        Returns:
+            Dict sorted by driver code, e.g. ``{"HAM": "Lewis Hamilton", …}``.
+            Returns an empty dict if the session has no data yet.
+        """
+        cache_key = f"_drivers_{year}_{gp}_{session_type}"
+        cached = self._cache_manager.get_from_session(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            session = self._retry(
+                lambda: self._load_session_laps_only(year, gp, session_type),
+                context=f"get_session_drivers({year}, {gp}, {session_type})",
+                no_retry_on=("does not exist",),
+            )
+            codes: list[str] = sorted(session.laps["Driver"].unique().tolist())
+            drivers: dict[str, str] = {}
+            for code in codes:
+                try:
+                    info = session.get_driver(code)
+                    full_name: str = (
+                        info.get("FullName")
+                        or f"{info.get('FirstName', '')} {info.get('LastName', '')}".strip()
+                        or code
+                    )
+                except Exception:  # noqa: BLE001
+                    full_name = code
+                drivers[code] = full_name
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not load driver list for %s %d %s: %s", gp, year, session_type, exc)
+            drivers = {}
+
+        self._cache_manager.set_in_session(cache_key, drivers)
+        return drivers
+
     def get_session(
         self,
         year: Year,
@@ -104,6 +230,7 @@ class FastF1Repository:
         session = self._retry(
             lambda: self._load_session(year, gp, session_type),
             context=f"get_session({year}, {gp}, {session_type})",
+            no_retry_on=("does not exist",),
         )
         self._cache_manager.set_in_session(session_key, session)
         return session
@@ -174,18 +301,40 @@ class FastF1Repository:
         gp: GrandPrix,
         session_type: str,
     ) -> fastf1.core.Session:
-        """Internal: create and load a FastF1 session (no retry logic here)."""
+        """Internal: create and fully load a FastF1 session (no retry logic here)."""
         session = fastf1.get_session(year, gp, session_type)
         session.load()
         return session
 
     @staticmethod
-    def _retry(func, context: str):
+    def _load_session_laps_only(
+        year: Year,
+        gp: GrandPrix,
+        session_type: str,
+    ) -> fastf1.core.Session:
+        """Internal: load a session with lap data only — no telemetry or weather.
+
+        Significantly faster than ``_load_session``; used to retrieve driver
+        lists without waiting for full telemetry download.
+        """
+        session = fastf1.get_session(year, gp, session_type)
+        session.load(laps=True, telemetry=False, weather=False, messages=False)
+        return session
+
+    @staticmethod
+    def _retry(
+        func,
+        context: str,
+        no_retry_on: tuple[str, ...] = (),
+    ):
         """Execute *func* with exponential backoff on exception.
 
         Args:
             func: Zero-argument callable to execute.
             context: Human-readable description for log messages.
+            no_retry_on: Tuple of substrings; if any appears in the exception
+                message the error is re-raised immediately without retrying.
+                Use this for non-transient errors such as "does not exist".
 
         Returns:
             The return value of *func*.
@@ -200,6 +349,9 @@ class FastF1Repository:
                 return func()
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
+                exc_msg = str(exc).lower()
+                if any(pattern.lower() in exc_msg for pattern in no_retry_on):
+                    raise
                 wait = API_RETRY_BACKOFF_BASE ** attempt
                 logger.warning(
                     "[%s] Attempt %d/%d failed: %s. Retrying in %.1fs…",

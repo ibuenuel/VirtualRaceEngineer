@@ -71,30 +71,114 @@ with st.sidebar:
     )
 
     st.markdown("##### Session")
-    year = st.selectbox("Year", options=list(range(2026, 2017, -1)), index=0)
-    gp = st.text_input("Grand Prix", placeholder="e.g. Monza, Monaco, Spa")
-    session_type = st.selectbox(
-        "Session",
-        options=["Q", "R", "FP1", "FP2", "FP3", "S"],
-        format_func=lambda x: {
-            "Q": "Qualifying",
-            "R": "Race",
-            "FP1": "Practice 1",
-            "FP2": "Practice 2",
-            "FP3": "Practice 3",
-            "S": "Sprint",
-        }.get(x, x),
+
+    # ------------------------------------------------------------------
+    # Year — always active
+    # ------------------------------------------------------------------
+    year = st.selectbox("Year", options=list(range(2026, 2018, -1)), index=0)
+
+    # ------------------------------------------------------------------
+    # Grand Prix — load event schedule once per year, then show dropdown
+    # ------------------------------------------------------------------
+    _sched_key = f"_schedule_{year}"
+    if _sched_key not in st.session_state:
+        with st.spinner(f"Loading {year} schedule…"):
+            st.session_state[_sched_key] = FastF1Repository().get_event_schedule(year)
+
+    gp_options: list[str] = st.session_state.get(_sched_key, [])
+
+    gp = st.selectbox(
+        "Grand Prix",
+        options=gp_options,
+        index=None,
+        placeholder="Select a Grand Prix…",
+        disabled=not gp_options,
     )
 
+    # ------------------------------------------------------------------
+    # Session type — active only when GP is selected; options loaded
+    # dynamically so Sprint only appears for sprint-weekend rounds.
+    # ------------------------------------------------------------------
+    _SESSION_LABELS = {
+        "Q": "Qualifying",
+        "R": "Race",
+        "FP1": "Practice 1",
+        "FP2": "Practice 2",
+        "FP3": "Practice 3",
+        "S": "Sprint",
+        "SQ": "Sprint Qualifying",
+        "SS": "Sprint Shootout",
+    }
+
+    _available_sessions: list[str] = []
+    if gp:
+        _sess_key = f"_session_types_{year}_{gp}"
+        if _sess_key not in st.session_state:
+            with st.spinner("Loading session info…"):
+                st.session_state[_sess_key] = FastF1Repository().get_event_session_types(year, gp)
+        _available_sessions = st.session_state.get(_sess_key, [])
+
+    session_type = st.selectbox(
+        "Session",
+        options=_available_sessions,
+        format_func=lambda x: _SESSION_LABELS.get(x, x),
+        index=None,
+        placeholder="Select a session…",
+        disabled=not _available_sessions,
+    )
+
+    # ------------------------------------------------------------------
+    # Drivers — lightweight session load to get actual driver list
+    # ------------------------------------------------------------------
     st.markdown("---")
     st.markdown("##### Drivers")
-    driver_a = st.text_input("Driver A", placeholder="e.g. VER", max_chars=3).upper()
-    driver_b = st.text_input("Driver B", placeholder="e.g. HAM", max_chars=3).upper()
 
+    # driver_options: dict {code → full_name}, e.g. {"VER": "Max Verstappen"}
+    driver_options: dict[str, str] = {}
+    if gp and session_type:
+        _drv_key = f"_drivers_{year}_{gp}_{session_type}"
+        if _drv_key not in st.session_state:
+            with st.spinner("Loading driver list…"):
+                st.session_state[_drv_key] = FastF1Repository().get_session_drivers(
+                    year, gp, session_type
+                )
+        driver_options = st.session_state.get(_drv_key, {})
+
+    _drv_codes = list(driver_options.keys())
+
+    driver_a = st.selectbox(
+        "Driver A",
+        options=_drv_codes,
+        index=None,
+        placeholder="Select driver A…",
+        disabled=not _drv_codes,
+        format_func=lambda c: f"{driver_options.get(c, c)} ({c})",
+    )
+    driver_b = st.selectbox(
+        "Driver B",
+        options=_drv_codes,
+        index=None,
+        placeholder="Select driver B…",
+        disabled=not _drv_codes,
+        format_func=lambda c: f"{driver_options.get(c, c)} ({c})",
+    )
+
+    if driver_a and driver_b and driver_a == driver_b:
+        st.warning("Please select two different drivers.")
+
+    # ------------------------------------------------------------------
+    # Load button — only active when all fields are complete
+    # ------------------------------------------------------------------
     st.markdown("---")
-    load_btn = st.button("Load Session", type="primary", width="stretch")
+    _ready = bool(gp and session_type and driver_a and driver_b and driver_a != driver_b)
+    load_btn = st.button(
+        "Load Session",
+        type="primary",
+        width="stretch",
+        disabled=not _ready,
+    )
 
-    # Show cached state indicator when results are present
+    # Status indicator — shows currently loaded session
     if _RESULTS_KEY in st.session_state:
         cached = st.session_state[_RESULTS_KEY]
         st.markdown(
@@ -117,92 +201,91 @@ page_header(
 # Load button handler — run full analysis pipeline
 # ---------------------------------------------------------------------------
 
-if load_btn:
-    if not gp or not driver_a or not driver_b:
-        st.warning("Please fill in Grand Prix, Driver A, and Driver B before loading.")
-    else:
-        try:
-            repo = FastF1Repository()
+if load_btn and _ready:
+    try:
+        repo = FastF1Repository()
 
-            with st.spinner(f"Loading {gp} {year} {session_type}…"):
-                session = repo.get_session(year, gp, session_type)
-                lap_a = repo.get_fastest_lap(session, driver_a)
-                lap_b = repo.get_fastest_lap(session, driver_b)
+        with st.spinner(f"Loading {gp} {year} {session_type}…"):
+            session = repo.get_session(year, gp, session_type)
+            lap_a = repo.get_fastest_lap(session, driver_a)
+            lap_b = repo.get_fastest_lap(session, driver_b)
 
-            with st.spinner("Synchronising telemetry…"):
-                synced = TelemetryService().sync_laps(lap_a, lap_b, driver_a, driver_b)
+        with st.spinner("Synchronising telemetry…"):
+            synced = TelemetryService().sync_laps(lap_a, lap_b, driver_a, driver_b)
 
-            with st.spinner("Running analysis strategies…"):
-                speed_result = SpeedDeltaStrategy().analyze(synced)
-                dna_result = DriverDNAStrategy().analyze(synced)
-                micro_result = MicroSectorStrategy().analyze(synced)
-                overtake_result = OvertakeProfileStrategy().analyze(synced)
+        with st.spinner("Running analysis strategies…"):
+            speed_result = SpeedDeltaStrategy().analyze(synced)
+            dna_result = DriverDNAStrategy().analyze(synced)
+            micro_result = MicroSectorStrategy().analyze(synced)
+            overtake_result = OvertakeProfileStrategy().analyze(synced)
 
-            verdict = AIVerdictService().generate(
-                driver_a=driver_a,
-                driver_b=driver_b,
-                speed_result=speed_result,
-                dna_result=dna_result,
-                micro_result=micro_result,
-                overtake_result=overtake_result,
-            )
+        verdict = AIVerdictService().generate(
+            driver_a=driver_a,
+            driver_b=driver_b,
+            speed_result=speed_result,
+            dna_result=dna_result,
+            micro_result=micro_result,
+            overtake_result=overtake_result,
+            name_a=driver_options.get(driver_a, driver_a),
+            name_b=driver_options.get(driver_b, driver_b),
+        )
 
-            # Build DriverStats from lap metadata + DNA profiles
-            def _get(profile, key):
-                if profile is None:
-                    return None
-                return profile[key] if isinstance(profile, dict) else getattr(profile, key)
+        # Build DriverStats from lap metadata + DNA profiles
+        def _get(profile, key):
+            if profile is None:
+                return None
+            return profile[key] if isinstance(profile, dict) else getattr(profile, key)
 
-            dna_summary = dna_result.summary
-            profile_a = dna_summary.get("driver_a_profile")
-            profile_b = dna_summary.get("driver_b_profile")
+        dna_summary = dna_result.summary
+        profile_a = dna_summary.get("driver_a_profile")
+        profile_b = dna_summary.get("driver_b_profile")
 
-            def _lap_time(lap) -> float | None:
-                try:
-                    lt = lap["LapTime"]
-                    return float(lt.total_seconds()) if pd.notna(lt) else None
-                except Exception:
-                    return None
+        def _lap_time(lap) -> float | None:
+            try:
+                lt = lap["LapTime"]
+                return float(lt.total_seconds()) if pd.notna(lt) else None
+            except Exception:
+                return None
 
-            stats_a = DriverStats(
-                driver=driver_a,
-                lap_time_seconds=_lap_time(lap_a),
-                max_speed_kph=float(synced.telemetry_a[COL_SPEED].max()),
-                avg_speed_kph=float(synced.telemetry_a[COL_SPEED].mean()),
-                avg_throttle_pct=_get(profile_a, "avg_throttle_pct"),
-                avg_brake_pct=_get(profile_a, "avg_brake_pct"),
-                distance_m=synced.lap_distance_m,
-            )
-            stats_b = DriverStats(
-                driver=driver_b,
-                lap_time_seconds=_lap_time(lap_b),
-                max_speed_kph=float(synced.telemetry_b[COL_SPEED].max()),
-                avg_speed_kph=float(synced.telemetry_b[COL_SPEED].mean()),
-                avg_throttle_pct=_get(profile_b, "avg_throttle_pct"),
-                avg_brake_pct=_get(profile_b, "avg_brake_pct"),
-                distance_m=synced.lap_distance_m,
-            )
+        stats_a = DriverStats(
+            driver=driver_a,
+            lap_time_seconds=_lap_time(lap_a),
+            max_speed_kph=float(synced.telemetry_a[COL_SPEED].max()),
+            avg_speed_kph=float(synced.telemetry_a[COL_SPEED].mean()),
+            avg_throttle_pct=_get(profile_a, "avg_throttle_pct"),
+            avg_brake_pct=_get(profile_a, "avg_brake_pct"),
+            distance_m=synced.lap_distance_m,
+        )
+        stats_b = DriverStats(
+            driver=driver_b,
+            lap_time_seconds=_lap_time(lap_b),
+            max_speed_kph=float(synced.telemetry_b[COL_SPEED].max()),
+            avg_speed_kph=float(synced.telemetry_b[COL_SPEED].mean()),
+            avg_throttle_pct=_get(profile_b, "avg_throttle_pct"),
+            avg_brake_pct=_get(profile_b, "avg_brake_pct"),
+            distance_m=synced.lap_distance_m,
+        )
 
-            # Cache everything in session_state
-            st.session_state[_RESULTS_KEY] = {
-                "synced": synced,
-                "speed_result": speed_result,
-                "dna_result": dna_result,
-                "micro_result": micro_result,
-                "overtake_result": overtake_result,
-                "verdict": verdict,
-                "stats_a": stats_a,
-                "stats_b": stats_b,
-                "gp": gp,
-                "year": year,
-                "session_type": session_type,
-                "driver_a": driver_a,
-                "driver_b": driver_b,
-            }
-            st.rerun()
+        # Cache everything in session_state
+        st.session_state[_RESULTS_KEY] = {
+            "synced": synced,
+            "speed_result": speed_result,
+            "dna_result": dna_result,
+            "micro_result": micro_result,
+            "overtake_result": overtake_result,
+            "verdict": verdict,
+            "stats_a": stats_a,
+            "stats_b": stats_b,
+            "gp": gp,
+            "year": year,
+            "session_type": session_type,
+            "driver_a": driver_a,
+            "driver_b": driver_b,
+        }
+        st.rerun()
 
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Failed to load session: {exc}")
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Failed to load session: {exc}")
 
 # ---------------------------------------------------------------------------
 # Results area — renders whenever cached results are available

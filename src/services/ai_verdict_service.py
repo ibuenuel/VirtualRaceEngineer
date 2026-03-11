@@ -72,20 +72,28 @@ class AIVerdictService:
         dna_result: AnalysisResult,
         micro_result: AnalysisResult,
         overtake_result: AnalysisResult,
+        name_a: str | None = None,
+        name_b: str | None = None,
     ) -> Verdict:
         """Produce a full verdict from all four strategy outputs.
 
         Args:
-            driver_a: Three-letter code for Driver A.
-            driver_b: Three-letter code for Driver B.
+            driver_a: Three-letter code for Driver A (used for data lookups).
+            driver_b: Three-letter code for Driver B (used for data lookups).
             speed_result: Output of SpeedDeltaStrategy.
             dna_result: Output of DriverDNAStrategy.
             micro_result: Output of MicroSectorStrategy.
             overtake_result: Output of OvertakeProfileStrategy.
+            name_a: Full display name for Driver A. Defaults to ``driver_a``.
+            name_b: Full display name for Driver B. Defaults to ``driver_b``.
 
         Returns:
             A fully populated Verdict dataclass.
         """
+        # Display names fall back to codes when full names are not provided
+        n_a = name_a or driver_a
+        n_b = name_b or driver_b
+
         sd = speed_result.summary
         dna = dna_result.summary
         ms = micro_result.summary
@@ -97,12 +105,12 @@ class AIVerdictService:
         return Verdict(
             driver_a=driver_a,
             driver_b=driver_b,
-            headline=self._headline(driver_a, driver_b, sd),
-            speed_analysis=self._speed_analysis(driver_a, driver_b, sd),
-            style_analysis=self._style_analysis(driver_a, driver_b, dna, profile_a, profile_b),
-            dominance_analysis=self._dominance_analysis(driver_a, driver_b, ms),
-            overtake_analysis=self._overtake_analysis(driver_a, driver_b, op),
-            conclusion=self._conclusion(driver_a, driver_b, sd, dna, ms, op),
+            headline=self._headline(driver_a, n_a, n_b, sd),
+            speed_analysis=self._speed_analysis(driver_a, n_a, n_b, sd),
+            style_analysis=self._style_analysis(driver_a, n_a, n_b, dna, profile_a, profile_b),
+            dominance_analysis=self._dominance_analysis(driver_a, driver_b, n_a, n_b, ms),
+            overtake_analysis=self._overtake_analysis(driver_a, driver_b, n_a, n_b, op),
+            conclusion=self._conclusion(driver_a, n_a, n_b, sd, dna, ms, op),
             raw_data={
                 "speed": sd,
                 "dna": dna,
@@ -116,9 +124,10 @@ class AIVerdictService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _headline(driver_a: str, driver_b: str, sd: dict) -> str:
-        faster = sd.get("faster_driver", driver_a)
-        slower = driver_b if faster == driver_a else driver_a
+    def _headline(driver_a: str, n_a: str, n_b: str, sd: dict) -> str:
+        faster_code = sd.get("faster_driver", driver_a)
+        faster = n_a if faster_code == driver_a else n_b
+        slower = n_b if faster_code == driver_a else n_a
         margin = sd.get("margin_s", 0.0)
         return (
             f"{faster} was the faster driver, building a {margin:.3f}s advantage "
@@ -126,9 +135,10 @@ class AIVerdictService:
         )
 
     @staticmethod
-    def _speed_analysis(driver_a: str, driver_b: str, sd: dict) -> str:
-        faster = sd.get("faster_driver", driver_a)
-        slower = driver_b if faster == driver_a else driver_a
+    def _speed_analysis(driver_a: str, n_a: str, n_b: str, sd: dict) -> str:
+        faster_code = sd.get("faster_driver", driver_a)
+        faster = n_a if faster_code == driver_a else n_b
+        slower = n_b if faster_code == driver_a else n_a
         margin = sd.get("margin_s", 0.0)
         max_diff = sd.get("max_speed_diff_kph", 0.0)
         gain_sector = sd.get("biggest_gain_sector", "?")
@@ -143,13 +153,15 @@ class AIVerdictService:
 
     @staticmethod
     def _style_analysis(
-        driver_a: str, driver_b: str, dna: dict, profile_a, profile_b
+        driver_a: str, n_a: str, n_b: str, dna: dict, profile_a, profile_b
     ) -> str:
         if profile_a is None or profile_b is None:
             return "Driver DNA data unavailable."
 
-        more_agg = dna.get("more_aggressive", driver_a)
-        smoother = dna.get("smoother_driver", driver_a)
+        more_agg_code = dna.get("more_aggressive", driver_a)
+        smoother_code = dna.get("smoother_driver", driver_a)
+        more_agg = n_a if more_agg_code == driver_a else n_b
+        smoother = n_a if smoother_code == driver_a else n_b
 
         # profile_a / profile_b may be DriverProfile objects or dicts
         def _get(p, key):
@@ -169,12 +181,12 @@ class AIVerdictService:
         if agg_diff < 5:
             style_lines.append(
                 f"Both drivers show a similar braking aggressiveness "
-                f"({driver_a}: {agg_a:.0f}/100, {driver_b}: {agg_b:.0f}/100)."
+                f"({n_a}: {agg_a:.0f}/100, {n_b}: {agg_b:.0f}/100)."
             )
         else:
             style_lines.append(
                 f"{more_agg} is the more aggressive braker "
-                f"({driver_a}: {agg_a:.0f}/100 vs {driver_b}: {agg_b:.0f}/100)."
+                f"({n_a}: {agg_a:.0f}/100 vs {n_b}: {agg_b:.0f}/100)."
             )
 
         # Smoothness comparison
@@ -182,12 +194,12 @@ class AIVerdictService:
         if smooth_diff < 5:
             style_lines.append(
                 f"Throttle application is equally smooth for both drivers "
-                f"({driver_a}: {smooth_a:.0f}/100, {driver_b}: {smooth_b:.0f}/100)."
+                f"({n_a}: {smooth_a:.0f}/100, {n_b}: {smooth_b:.0f}/100)."
             )
         else:
             style_lines.append(
                 f"{smoother} has a cleaner throttle trace "
-                f"({driver_a}: {smooth_a:.0f}/100 vs {driver_b}: {smooth_b:.0f}/100)."
+                f"({n_a}: {smooth_a:.0f}/100 vs {n_b}: {smooth_b:.0f}/100)."
             )
 
         # Brake profile
@@ -195,49 +207,51 @@ class AIVerdictService:
             style_lines.append(f"Both are classified as '{brake_a}' brakers.")
         else:
             style_lines.append(
-                f"Braking style diverges: {driver_a} is a '{brake_a}' "
-                f"while {driver_b} is a '{brake_b}'."
+                f"Braking style diverges: {n_a} is a '{brake_a}' "
+                f"while {n_b} is a '{brake_b}'."
             )
 
         return " ".join(style_lines)
 
     @staticmethod
-    def _dominance_analysis(driver_a: str, driver_b: str, ms: dict) -> str:
+    def _dominance_analysis(driver_a: str, driver_b: str, n_a: str, n_b: str, ms: dict) -> str:
         total = ms.get("total_sectors", 0)
         if total == 0:
             return "Micro-sector data unavailable."
 
         wins_a = ms.get(f"sectors_won_{driver_a}", 0)
         wins_b = ms.get(f"sectors_won_{driver_b}", 0)
-        dominant = ms.get("dominant_driver", driver_a)
+        dominant_code = ms.get("dominant_driver", driver_a)
+        dominant = n_a if dominant_code == driver_a else n_b
         ratio = ms.get("dominance_ratio", 0.0)
         best_a = ms.get(f"best_sector_{driver_a}", "?")
         best_b = ms.get(f"best_sector_{driver_b}", "?")
 
         return (
-            f"Across {total} micro-sectors of 50 m each, {driver_a} won {wins_a} "
-            f"and {driver_b} won {wins_b}. "
+            f"Across {total} micro-sectors of 50 m each, {n_a} won {wins_a} "
+            f"and {n_b} won {wins_b}. "
             f"{dominant} controlled {ratio:.0f}% of the lap. "
-            f"{driver_a}'s strongest sector was #{best_a}; "
-            f"{driver_b}'s was #{best_b}."
+            f"{n_a}'s strongest sector was #{best_a}; "
+            f"{n_b}'s was #{best_b}."
         )
 
     @staticmethod
-    def _overtake_analysis(driver_a: str, driver_b: str, op: dict) -> str:
+    def _overtake_analysis(driver_a: str, driver_b: str, n_a: str, n_b: str, op: dict) -> str:
         total = op.get("total_exit_zones", 0)
         if total == 0:
             return "Overtake profile data unavailable."
 
         wins_a = op.get(f"exit_wins_{driver_a}", 0)
         wins_b = op.get(f"exit_wins_{driver_b}", 0)
-        stronger = op.get("stronger_on_exits", driver_a)
+        stronger_code = op.get("stronger_on_exits", driver_a)
+        stronger = n_a if stronger_code == driver_a else n_b
         avg_delta = op.get("avg_delta_kph", 0.0)
 
-        vuln = driver_b if stronger == driver_a else driver_a
+        vuln = n_b if stronger_code == driver_a else n_a
 
         return (
-            f"Of {total} detected corner exits, {driver_a} had the better exit "
-            f"{wins_a} times and {driver_b} {wins_b} times. "
+            f"Of {total} detected corner exits, {n_a} had the better exit "
+            f"{wins_a} times and {n_b} {wins_b} times. "
             f"{stronger} is the stronger on exit overall (avg Δ {abs(avg_delta):.1f} km/h). "
             f"{vuln} is most vulnerable to being overtaken on the run to the next braking zone."
         )
@@ -245,25 +259,27 @@ class AIVerdictService:
     @staticmethod
     def _conclusion(
         driver_a: str,
-        driver_b: str,
+        n_a: str,
+        n_b: str,
         sd: dict,
         dna: dict,
         ms: dict,
         op: dict,
     ) -> str:
-        faster = sd.get("faster_driver", driver_a)
-        slower = driver_b if faster == driver_a else driver_a
+        faster_code = sd.get("faster_driver", driver_a)
+        faster = n_a if faster_code == driver_a else n_b
+        slower = n_b if faster_code == driver_a else n_a
         margin = sd.get("margin_s", 0.0)
-        dominant = ms.get("dominant_driver", faster)
-        stronger_exits = op.get("stronger_on_exits", faster)
-        smoother = dna.get("smoother_driver", faster)
+        dominant_code = ms.get("dominant_driver", faster_code)
+        stronger_exits_code = op.get("stronger_on_exits", faster_code)
+        smoother_code = dna.get("smoother_driver", faster_code)
 
         strengths: list[str] = []
-        if dominant == faster:
+        if dominant_code == faster_code:
             strengths.append("track dominance")
-        if stronger_exits == faster:
+        if stronger_exits_code == faster_code:
             strengths.append("corner exits")
-        if smoother == faster:
+        if smoother_code == faster_code:
             strengths.append("throttle application")
 
         strengths_text = (
@@ -274,6 +290,6 @@ class AIVerdictService:
             f"Engineering verdict: {faster} had the edge in {strengths_text}, "
             f"translating to a {margin:.3f}s margin over {slower}. "
             f"For {slower} to close the gap, focus areas are "
-            f"{'braking commitment' if dna.get('more_aggressive') == faster else 'exit speed'} "
+            f"{'braking commitment' if dna.get('more_aggressive') == faster_code else 'exit speed'} "
             f"and sector-level consistency."
         )
