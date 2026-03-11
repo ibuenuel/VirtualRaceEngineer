@@ -129,12 +129,3 @@ deactivate
 ```
 
 ---
-
-## Roadmap
-
-- **Phase 1** ✅ Project setup, FastF1 repository, cache management
-- **Phase 2** ✅ Domain models (Pydantic), Streamlit base layout, Tailwind CSS, ComponentLibrary
-- **Phase 3** ✅ Telemetry engine (distance interpolation, lap sync, SpeedDelta, DriverDNA)
-- **Phase 4** ✅ Advanced features (MicroSector, OvertakeProfile, AIVerdictService)
-- **Phase 5** 🔜 Plotly charts, track map heatmap, loading states
-- **Phase 6** 🔜 Full test coverage, linting, docstring review
