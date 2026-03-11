@@ -3,7 +3,7 @@
 A professional-grade F1 telemetry analysis platform built with Python and FastF1.
 Compare driver performance lap-by-lap, analyse braking signatures, and get automated strategic insights — all in an interactive web interface.
 
-> **Status: Phase 1 — Infrastructure** · Phase 2 (UI & Domain Models) in progress
+> **Status: Phase 2 — UI & Domain Models** · Phase 3 (Telemetry Engine) next
 
 ---
 
@@ -14,6 +14,10 @@ Compare driver performance lap-by-lap, analyse braking signatures, and get autom
 | ✅ | FastF1 data access with local cache |
 | ✅ | Thread-safe Singleton repository |
 | ✅ | Retry logic for API timeouts |
+| ✅ | Domain models (Lap, DriverStats) with Pydantic validation |
+| ✅ | Dark theme UI with F1-inspired colour palette |
+| ✅ | Session selector sidebar (Year, GP, Session, Drivers) |
+| ✅ | Reusable component library (Stat Cards, Driver Badges) |
 | 🔜 | Driver telemetry comparison (Speed, Throttle, Brake) |
 | 🔜 | Distance-based lap synchronisation |
 | 🔜 | Micro-Sector Dominance map (50 m segments) |
@@ -124,7 +128,7 @@ deactivate
 ## Roadmap
 
 - **Phase 1** ✅ Project setup, FastF1 repository, cache management
-- **Phase 2** 🔜 Domain models (Pydantic), Streamlit base layout, Tailwind CSS
+- **Phase 2** ✅ Domain models (Pydantic), Streamlit base layout, Tailwind CSS, ComponentLibrary
 - **Phase 3** 🔜 Telemetry engine (distance interpolation, lap sync, analysis strategies)
 - **Phase 4** 🔜 Advanced features (Micro-Sector, Brake Shape, AI Verdict)
 - **Phase 5** 🔜 Plotly charts, track map heatmap, loading states
