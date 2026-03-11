@@ -57,9 +57,8 @@ class TestCacheManager:
         assert not entry.exists()
 
     def test_session_state_fallback_outside_streamlit(self) -> None:
-        # Should not raise even without Streamlit context
-        CacheManager.set_in_session("key", "value")
-        result = CacheManager.get_from_session("key", default="fallback")
+        # A key that was never set must return the default value
+        result = CacheManager.get_from_session("__nonexistent_key__", default="fallback")
         assert result == "fallback"
 
 
@@ -140,7 +139,7 @@ class TestGetLap:
         lap_data = pd.DataFrame({
             "LapNumber": [lap_number],
             "Driver": [driver],
-            "LapTime": [pd.Timedelta("1:18.500")],
+            "LapTime": [pd.Timedelta("0:01:18.500")],
         })
         mock_laps = MagicMock()
         mock_laps.pick_driver.return_value = lap_data

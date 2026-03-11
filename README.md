@@ -3,7 +3,7 @@
 A professional-grade F1 telemetry analysis platform built with Python and FastF1.
 Compare driver performance lap-by-lap, analyse braking signatures, and get automated strategic insights — all in an interactive web interface.
 
-> **Status: Phase 2 — UI & Domain Models** · Phase 3 (Telemetry Engine) next
+> **Status: Phase 3 — Telemetry Engine** · Phase 4 (Advanced Features & AI Verdict) next
 
 ---
 
@@ -18,10 +18,12 @@ Compare driver performance lap-by-lap, analyse braking signatures, and get autom
 | ✅ | Dark theme UI with F1-inspired colour palette |
 | ✅ | Session selector sidebar (Year, GP, Session, Drivers) |
 | ✅ | Reusable component library (Stat Cards, Driver Badges) |
-| 🔜 | Driver telemetry comparison (Speed, Throttle, Brake) |
-| 🔜 | Distance-based lap synchronisation |
+| ✅ | Distance-based lap synchronisation (1 m grid) |
+| ✅ | Speed Delta — cumulative time loss/gain per metre |
+| ✅ | Driver DNA — Aggressiveness & Smoothness scores |
+| ✅ | Brake Shape Analysis (Trail Braker vs. V-Shaper) |
+| 🔜 | Driver telemetry comparison charts (Speed, Throttle, Brake) |
 | 🔜 | Micro-Sector Dominance map (50 m segments) |
-| 🔜 | Brake Shape Analysis (Trail Braking vs. V-Shape) |
 | 🔜 | Overtake Profile heuristics |
 | 🔜 | AI Race Engineer Verdict |
 
@@ -129,7 +131,7 @@ deactivate
 
 - **Phase 1** ✅ Project setup, FastF1 repository, cache management
 - **Phase 2** ✅ Domain models (Pydantic), Streamlit base layout, Tailwind CSS, ComponentLibrary
-- **Phase 3** 🔜 Telemetry engine (distance interpolation, lap sync, analysis strategies)
+- **Phase 3** ✅ Telemetry engine (distance interpolation, lap sync, SpeedDelta, DriverDNA)
 - **Phase 4** 🔜 Advanced features (Micro-Sector, Brake Shape, AI Verdict)
 - **Phase 5** 🔜 Plotly charts, track map heatmap, loading states
 - **Phase 6** 🔜 Full test coverage, linting, docstring review
