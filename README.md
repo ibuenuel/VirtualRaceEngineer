@@ -3,7 +3,7 @@
 A professional-grade F1 telemetry analysis platform built with Python and FastF1.
 Compare driver performance lap-by-lap, analyse braking signatures, and get automated strategic insights — all in an interactive web interface.
 
-> **Status: Phase 3 — Telemetry Engine** · Phase 4 (Advanced Features & AI Verdict) next
+> **Status: Phase 4 — Advanced Features & AI Verdict** · Phase 5 (Visualisation) next
 
 ---
 
@@ -23,9 +23,12 @@ Compare driver performance lap-by-lap, analyse braking signatures, and get autom
 | ✅ | Driver DNA — Aggressiveness & Smoothness scores |
 | ✅ | Brake Shape Analysis (Trail Braker vs. V-Shaper) |
 | 🔜 | Driver telemetry comparison charts (Speed, Throttle, Brake) |
-| 🔜 | Micro-Sector Dominance map (50 m segments) |
-| 🔜 | Overtake Profile heuristics |
-| 🔜 | AI Race Engineer Verdict |
+| ✅ | Micro-Sector Dominance (50 m segments, colour-coded winner per zone) |
+| ✅ | Overtake Profile (corner exit speed comparison, vulnerability map) |
+| ✅ | AI Race Engineer Verdict (heuristic — deterministic, offline) |
+| 🔜 | Driver telemetry comparison charts (Speed, Throttle, Brake) |
+| 🔜 | Cumulative Delta chart |
+| 🔜 | Track map heatmap |
 
 ---
 
@@ -132,6 +135,6 @@ deactivate
 - **Phase 1** ✅ Project setup, FastF1 repository, cache management
 - **Phase 2** ✅ Domain models (Pydantic), Streamlit base layout, Tailwind CSS, ComponentLibrary
 - **Phase 3** ✅ Telemetry engine (distance interpolation, lap sync, SpeedDelta, DriverDNA)
-- **Phase 4** 🔜 Advanced features (Micro-Sector, Brake Shape, AI Verdict)
+- **Phase 4** ✅ Advanced features (MicroSector, OvertakeProfile, AIVerdictService)
 - **Phase 5** 🔜 Plotly charts, track map heatmap, loading states
 - **Phase 6** 🔜 Full test coverage, linting, docstring review
