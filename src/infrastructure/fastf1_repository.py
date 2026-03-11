@@ -108,6 +108,31 @@ class FastF1Repository:
         self._cache_manager.set_in_session(session_key, session)
         return session
 
+    def get_fastest_lap(
+        self,
+        session: fastf1.core.Session,
+        driver: DriverCode,
+    ) -> fastf1.core.Lap:
+        """Retrieve the fastest valid lap for a driver in the session.
+
+        Args:
+            session: A loaded FastF1 Session (returned by ``get_session``).
+            driver: Three-letter driver code, e.g. "VER".
+
+        Returns:
+            The fastest ``fastf1.core.Lap`` for the driver.
+
+        Raises:
+            ValueError: If no valid lap is found for the driver.
+        """
+        lap = session.laps.pick_driver(driver).pick_fastest()
+        if lap is None:
+            raise ValueError(
+                f"No valid fastest lap found for driver '{driver}' "
+                f"in session '{session.event['EventName']} {session.name}'."
+            )
+        return lap
+
     def get_lap(
         self,
         session: fastf1.core.Session,

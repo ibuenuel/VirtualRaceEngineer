@@ -5,9 +5,12 @@ All components render via st.markdown with custom CSS classes defined in
 style_utils.py. Components accept plain Python types — no Streamlit state.
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import streamlit as st
+
+if TYPE_CHECKING:
+    from src.services.ai_verdict_service import Verdict
 
 from src.domain.models import DriverStats
 from src.ui.style_utils import theme
@@ -161,6 +164,82 @@ def page_header(title: str, subtitle: Optional[str] = None) -> None:
             {title}
           </h1>
           {sub_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def verdict_card(verdict: "Verdict") -> None:
+    """Render the full Race Engineer Verdict with all six sections.
+
+    Displays the headline as a banner, four analysis sections in a 2-column
+    grid, and the conclusion as a full-width summary card.
+
+    Args:
+        verdict: Populated Verdict dataclass from AIVerdictService.
+    """
+    from src.ui.style_utils import theme
+
+    t = theme()
+
+    # --- Headline banner ---
+    st.markdown(
+        f"""
+        <div style="border-left:4px solid #e8002d;background:#1e1e1e;
+                    border-radius:8px;padding:1.2rem 1.4rem;margin-bottom:1.5rem;">
+          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;
+                      text-transform:uppercase;color:#8a8a8a;margin-bottom:0.5rem;">
+            Race Engineer Verdict
+          </div>
+          <div style="font-size:1.15rem;font-weight:700;line-height:1.4;">
+            {verdict.headline}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # --- Four analysis sections in 2 x 2 grid ---
+    sections = [
+        ("Speed Analysis", verdict.speed_analysis, t["driver_a"]),
+        ("Driving Style", verdict.style_analysis, t["driver_b"]),
+        ("Micro-Sector Dominance", verdict.dominance_analysis, "#a78bfa"),
+        ("Overtake Profile", verdict.overtake_analysis, "#34d399"),
+    ]
+
+    col_left, col_right = st.columns(2, gap="medium")
+    cols = [col_left, col_right]
+
+    for i, (title, text, accent) in enumerate(sections):
+        with cols[i % 2]:
+            st.markdown(
+                f"""
+                <div class="vre-card" style="margin-bottom:1rem;min-height:120px;">
+                  <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;
+                              text-transform:uppercase;color:{accent};margin-bottom:0.6rem;">
+                    {title}
+                  </div>
+                  <div style="font-size:0.88rem;line-height:1.6;color:#d4d4d4;">
+                    {text}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # --- Conclusion (full width) ---
+    st.markdown(
+        f"""
+        <div style="background:#1a1f2e;border:1px solid #2a3250;border-radius:8px;
+                    padding:1.2rem 1.4rem;margin-top:0.5rem;">
+          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;
+                      text-transform:uppercase;color:#e8002d;margin-bottom:0.6rem;">
+            Engineering Conclusion
+          </div>
+          <div style="font-size:0.95rem;line-height:1.7;color:#e0e0e0;font-weight:500;">
+            {verdict.conclusion}
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
